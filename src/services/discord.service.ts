@@ -22,11 +22,11 @@ export class DiscordService implements OnModuleInit {
     this.addListeners(this.client);
     await this.client.login(this.configService.get('DISCORD_TOKEN'));
     this.allowedGuildIds = this.configService
-      .get<string>('DISCORD_ALLOWED_GUILD_IDS')
+      .get<string>('DISCORD_ALLOWED_GUILD_IDS', '')
       .split(',')
       .filter(id => Boolean(id));
     this.allowedChannelIds = this.configService
-      .get<string>('DISCORD_ALLOWED_CHANNEL_IDS')
+      .get<string>('DISCORD_ALLOWED_CHANNEL_IDS', '')
       .split(',')
       .filter(id => Boolean(id));
   }
