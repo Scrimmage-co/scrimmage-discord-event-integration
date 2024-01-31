@@ -20,17 +20,19 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-2
+          aws-region: us-east-1
 
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registry-type: public
 
       - name: Build, tag, and push terraform image to Amazon ECR
         id: build-terraform-image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: scrimmage-discord-event-integration
+          ECR_REPOSITORY: u8g2k1e9/scrimmage-discord-event-integration
           IMAGE_TAG: ${{ github.sha }}
         run: |
           # Build a docker container and
