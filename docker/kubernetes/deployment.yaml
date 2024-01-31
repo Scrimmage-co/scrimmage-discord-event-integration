@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scrimmage-discord-event-integration
+  namespace: default
+  labels:
+    app: scrimmage-discord-event-integration
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: scrimmage-discord-event-integration
+  template:
+    metadata:
+      labels:
+        app: scrimmage-discord-event-integration
+    spec:
+      containers:
+        - name: scrimmage-discord-event-integration
+          image: public.ecr.aws/u8g2k1e9/scrimmage-discord-event-integration:0.0.1
+          env:
+            - name: DISCORD_TOKEN
+              value: ""
+            - name: DISCORD_ALLOWED_CHANNEL_IDS
+              value: ""
+            - name: DISCORD_ALLOWED_GUILD_IDS
+              value: ""
+            - name: SCRIMMAGE_API_SERVER_ENDPOINT
+              value: ""
+            - name: SCRIMMAGE_PRIVATE_KEY
+              value: ""
+            - name: SCRIMMAGE_NAMESPACE
+              value: ""
+            - name: SCRIMMAGE_DATA_TYPE_PREFIX
+              value: ""
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"

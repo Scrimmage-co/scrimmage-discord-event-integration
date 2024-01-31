@@ -1,8 +1,9 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Client, Events, GatewayIntentBits } from 'discord.js';
 import { ConfigService } from '@nestjs/config';
-import { ScrimmageService } from './scrimmage.service';
 import { DiscordToScrimmageService } from './discord-to-scrimmage.service';
+import DiscordCommands from './commands';
+import { Configuration } from '../configurations';
 
 @Injectable()
 export class DiscordService implements OnModuleInit {
@@ -12,30 +13,32 @@ export class DiscordService implements OnModuleInit {
   private client: Client;
 
   constructor(
-    private configService: ConfigService,
-    private mappingService: ScrimmageService,
+    private configService: ConfigService<Configuration>,
     private discordToScrimmageService: DiscordToScrimmageService,
   ) {}
 
   async onModuleInit(): Promise<void> {
     this.client = this.createClient();
-    this.addListeners(this.client);
+    const readyPromise = this.addListeners(this.client);
     await this.client.login(this.configService.get('DISCORD_TOKEN'));
-    this.allowedGuildIds = this.configService
-      .get<string>('DISCORD_ALLOWED_GUILD_IDS', '')
-      .split(',')
-      .filter(id => Boolean(id));
-    this.allowedChannelIds = this.configService
-      .get<string>('DISCORD_ALLOWED_CHANNEL_IDS', '')
-      .split(',')
-      .filter(id => Boolean(id));
+    this.allowedGuildIds = this.configService.get('DISCORD_ALLOWED_GUILD_IDS');
+    this.allowedChannelIds = this.configService.get(
+      'DISCORD_ALLOWED_CHANNEL_IDS',
+    );
+    await readyPromise;
+    await this.updateCommands(this.client);
   }
 
-  private addListeners(client: Client) {
-    client.on(Events.ClientReady, () => {
-      this.logger.log('Discord client ready');
+  private addListeners(client: Client): Promise<void> {
+    const readyPromise = new Promise<void>(resolve => {
+      client.on(Events.ClientReady, () => {
+        this.logger.log('Discord client ready');
+        resolve();
+      });
     });
+
     this.addMessageReactionAddListener(client);
+    this.addInteractionCreateListener(client);
     this.addMessageCreateListener(client);
     this.addGuildMemberAddListener(client);
     this.addGuildMemberUpdateListener(client);
@@ -44,6 +47,42 @@ export class DiscordService implements OnModuleInit {
     this.addVoiceStateUpdateListener(client);
     this.addGuildScheduledEventUserAddListener(client);
     this.addGuildScheduledEventUserRemoveListener(client);
+    return readyPromise;
+  }
+
+  private async updateCommands(client: Client) {
+    const existingCommands = await client.application.commands.fetch();
+    const newCommands = DiscordCommands.filter(
+      command =>
+        !existingCommands.some(
+          existingCommand => existingCommand.name === command.name,
+        ),
+    );
+    for (const command of newCommands) {
+      this.logger.log(`Creating command ${command.name}`);
+      await client.application.commands.create(command);
+    }
+    const deletedCommands = existingCommands.filter(
+      existingCommand =>
+        !DiscordCommands.some(command => command.name === existingCommand.name),
+    );
+    for (const [name, command] of deletedCommands) {
+      this.logger.log(`Deleting command ${name}`);
+      await command.delete();
+    }
+    const updatedCommands = existingCommands.filter(existingCommand =>
+      DiscordCommands.some(command => command.name === existingCommand.name),
+    );
+    for (const [name, command] of updatedCommands) {
+      const discordCommand = DiscordCommands.find(
+        command => command.name === name,
+      );
+      this.logger.log(`Updating command ${name}`);
+      await client.application.commands.edit(command, {
+        ...(command.toJSON() as any),
+        ...discordCommand,
+      });
+    }
   }
 
   private createClient(): Client {
@@ -89,6 +128,28 @@ export class DiscordService implements OnModuleInit {
         return;
       }
       await this.discordToScrimmageService.trackMessageCreate(message);
+    });
+  }
+
+  private addInteractionCreateListener(client: Client) {
+    client.on(Events.InteractionCreate, async interaction => {
+      if (!interaction.isCommand()) {
+        return;
+      }
+      if (!this.configService.get('DISCORD_ALLOW_REGISTRATION')) {
+        await interaction.reply({
+          content: 'Registration is disabled',
+          ephemeral: true,
+        });
+        return;
+      }
+      const response = await this.discordToScrimmageService.registerUser(
+        interaction.user,
+      );
+      await interaction.reply({
+        content: response,
+        ephemeral: true,
+      });
     });
   }
 

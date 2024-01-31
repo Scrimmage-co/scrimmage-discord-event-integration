@@ -5,11 +5,12 @@ import { DiscordToScrimmageService } from './services/discord-to-scrimmage.servi
 import { ConfigModule } from '@nestjs/config';
 import { ScrimmageService } from './services/scrimmage.service';
 import { DiscordUtilsService } from './services/discord-utils.service';
+import { loadDotEnvConfiguration } from './configurations';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
-      envFilePath: '.env',
+      load: [loadDotEnvConfiguration],
       isGlobal: true,
     }),
   ],

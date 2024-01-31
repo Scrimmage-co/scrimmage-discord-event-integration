@@ -9,10 +9,17 @@ interface ScrimmageEvent {
   body: Record<string, any>;
 }
 
+interface RegisterUserParam {
+  avatar: string;
+  userId: string;
+  username: string;
+}
+
 @Injectable()
 export class ScrimmageService implements OnModuleInit {
   private logger = new Logger(ScrimmageService.name);
   private eventsQueue: Promise<void>[] = [];
+  private widgetLink: string;
   constructor(private configService: ConfigService) {}
 
   async onModuleInit(): Promise<void> {
@@ -30,6 +37,10 @@ export class ScrimmageService implements OnModuleInit {
         warn: (message: string) => this.logger.warn(message),
       },
     });
+    this.widgetLink = this.configService.get('SCRIMMAGE_API_SERVER_ENDPOINT');
+    if (!this.widgetLink.endsWith('/')) {
+      this.widgetLink += '/';
+    }
   }
 
   trackEvent(event: ScrimmageEvent) {
@@ -67,5 +78,16 @@ export class ScrimmageService implements OnModuleInit {
       );
     });
     this.eventsQueue.push(promisedEvent);
+  }
+
+  async registerUser(param: RegisterUserParam): Promise<string> {
+    this.logger.log(`Registering user ${param.userId}`);
+    const token = await Scrimmage.user.getUserToken(param.userId, {
+      properties: {
+        ...(param.username && { username: param.username }),
+        ...(param.avatar && { avatar: param.avatar }),
+      },
+    });
+    return `You have been registered for rewards. [Click to see more](${this.widgetLink}?token=${token})`;
   }
 }

@@ -29,10 +29,7 @@ export class DiscordToScrimmageService implements OnModuleInit {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    this.dataTypePrefix = this.configService.get(
-      'SCRIMMAGE_DATA_TYPE_PREFIX',
-      '',
-    );
+    this.dataTypePrefix = this.configService.get('SCRIMMAGE_DATA_TYPE_PREFIX');
   }
 
   async trackMessageReactionAdd(
@@ -57,6 +54,14 @@ export class DiscordToScrimmageService implements OnModuleInit {
         totalReactionsCount: reaction.message.reactions.cache.size,
         original: reaction.toJSON(),
       },
+    });
+  }
+
+  async registerUser(user: User) {
+    return this.scrimmageService.registerUser({
+      userId: user.id,
+      username: user.username,
+      avatar: user.avatar,
     });
   }
 
@@ -86,7 +91,6 @@ export class DiscordToScrimmageService implements OnModuleInit {
         ),
         embedsAmount: message.embeds.length,
         embedsTypes: message.embeds.map(embed => embed.data.type),
-        embedsProviderNames: message.embeds.map(embed => embed.provider.name),
         stickersAmount: [...message.stickers.entries()].length,
         attachmentsAmount: message.attachments.size,
         componentsAmount: message.components.length,
@@ -217,24 +221,35 @@ export class DiscordToScrimmageService implements OnModuleInit {
   }
 
   async trackVoiceStateUpdate(oldState: VoiceState, newState: VoiceState) {
-    if (oldState.channelId === null && newState.channelId !== null) {
-      this.scrimmageService.trackEvent({
-        userId: await this.discordUtilsService.getUserId(newState.member.user),
-        uniqueId: newState.member.user.id,
-        dataType: `${this.dataTypePrefix}DiscordVoiceChannelJoin`,
-        body: {
-          guildName: newState.guild.name,
-          guildId: newState.guild.id,
-          channelId: newState.channel.id,
-          channelName: (newState.channel as any).name,
-          original: newState.toJSON(),
-        },
-      });
-    } else if (oldState.channelId !== null && newState.channelId === null) {
+    if (
+      (oldState.channelId !== null && newState.channelId === null) ||
+      (oldState.channelId !== null &&
+        newState.channelId !== null &&
+        oldState.channelId !== newState.channelId)
+    ) {
       this.scrimmageService.trackEvent({
         userId: await this.discordUtilsService.getUserId(newState.member.user),
         uniqueId: newState.member.user.id,
         dataType: `${this.dataTypePrefix}DiscordVoiceChannelLeave`,
+        body: {
+          guildName: newState.guild.name,
+          guildId: newState.guild.id,
+          channelId: oldState.channelId,
+          channelName: oldState.channel.name,
+          original: newState.toJSON(),
+        },
+      });
+    }
+    if (
+      (oldState.channelId === null && newState.channelId !== null) ||
+      (oldState.channelId !== null &&
+        newState.channelId !== null &&
+        oldState.channelId !== newState.channelId)
+    ) {
+      this.scrimmageService.trackEvent({
+        userId: await this.discordUtilsService.getUserId(newState.member.user),
+        uniqueId: newState.member.user.id,
+        dataType: `${this.dataTypePrefix}DiscordVoiceChannelJoin`,
         body: {
           guildName: newState.guild.name,
           guildId: newState.guild.id,
