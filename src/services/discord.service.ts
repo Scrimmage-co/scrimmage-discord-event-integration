@@ -3,24 +3,32 @@ import { Client, Events, GatewayIntentBits } from 'discord.js';
 import { ConfigService } from '@nestjs/config';
 import { ScrimmageService } from './scrimmage.service';
 import { DiscordToScrimmageService } from './discord-to-scrimmage.service';
-import { Subject } from 'rxjs';
 
 @Injectable()
 export class DiscordService implements OnModuleInit {
   private readonly logger = new Logger(DiscordService.name);
-  private readonly scrimmageEvent$ = new Subject<any>();
+  private allowedGuildIds: string[];
+  private allowedChannelIds: string[];
   private client: Client;
 
   constructor(
     private configService: ConfigService,
     private mappingService: ScrimmageService,
-    private scrimmageService: DiscordToScrimmageService,
+    private discordToScrimmageService: DiscordToScrimmageService,
   ) {}
 
   async onModuleInit(): Promise<void> {
     this.client = this.createClient();
     this.addListeners(this.client);
     await this.client.login(this.configService.get('DISCORD_TOKEN'));
+    this.allowedGuildIds = this.configService
+      .get<string>('DISCORD_ALLOWED_GUILD_IDS')
+      .split(',')
+      .filter(id => Boolean(id));
+    this.allowedChannelIds = this.configService
+      .get<string>('DISCORD_ALLOWED_CHANNEL_IDS')
+      .split(',')
+      .filter(id => Boolean(id));
   }
 
   private addListeners(client: Client) {
@@ -34,7 +42,6 @@ export class DiscordService implements OnModuleInit {
     this.addGuildMemberRemoveListener(client);
     this.addThreadCreateListener(client);
     this.addVoiceStateUpdateListener(client);
-    this.addGuildScheduledEventCreateListener(client);
     this.addGuildScheduledEventUserAddListener(client);
     this.addGuildScheduledEventUserRemoveListener(client);
   }
@@ -59,88 +66,139 @@ export class DiscordService implements OnModuleInit {
   }
 
   private addMessageReactionAddListener(client: Client) {
-    client.on(
-      Events.MessageReactionAdd,
-      async (reaction, user) =>
-        await this.scrimmageService.trackMessageReactionAdd(reaction, user),
-    );
+    client.on(Events.MessageReactionAdd, async (reaction, user) => {
+      if (!this.isAllowedGuild(reaction.message.guild.id)) {
+        return;
+      }
+      if (!this.isAllowedChannel(reaction.message.channel.id)) {
+        return;
+      }
+      await this.discordToScrimmageService.trackMessageReactionAdd(
+        reaction,
+        user,
+      );
+    });
   }
 
   private addMessageCreateListener(client: Client) {
-    client.on(
-      Events.MessageCreate,
-      async message => await this.scrimmageService.trackMessageCreate(message),
-    );
+    client.on(Events.MessageCreate, async message => {
+      if (!this.isAllowedGuild(message.guild.id)) {
+        return;
+      }
+      if (!this.isAllowedChannel(message.channel.id)) {
+        return;
+      }
+      await this.discordToScrimmageService.trackMessageCreate(message);
+    });
   }
 
   private addGuildMemberAddListener(client: Client) {
-    client.on(
-      Events.GuildMemberAdd,
-      async member => await this.scrimmageService.trackGuildMemberAdd(member),
-    );
+    client.on(Events.GuildMemberAdd, async member => {
+      if (!this.isAllowedGuild(member.guild.id)) {
+        return;
+      }
+      if (!this.isAllowedChannel(member.guild.systemChannelId)) {
+        return;
+      }
+      await this.discordToScrimmageService.trackGuildMemberAdd(member);
+    });
   }
 
   private addGuildMemberUpdateListener(client: Client) {
-    client.on(
-      Events.GuildMemberUpdate,
-      async (oldMember, newMember) =>
-        await this.scrimmageService.trackGuildMemberUpdate(
-          oldMember,
-          newMember,
-        ),
-    );
+    client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
+      if (!this.isAllowedGuild(newMember.guild.id)) {
+        return;
+      }
+      if (!this.isAllowedChannel(newMember.guild.systemChannelId)) {
+        return;
+      }
+      await this.discordToScrimmageService.trackGuildMemberUpdate(
+        oldMember,
+        newMember,
+      );
+    });
   }
 
   private addGuildMemberRemoveListener(client: Client) {
-    client.on(
-      Events.GuildMemberRemove,
-      async member =>
-        await this.scrimmageService.trackGuildMemberRemove(member),
-    );
+    client.on(Events.GuildMemberRemove, async member => {
+      if (!this.isAllowedGuild(member.guild.id)) {
+        return;
+      }
+      if (!this.isAllowedChannel(member.guild.systemChannelId)) {
+        return;
+      }
+      await this.discordToScrimmageService.trackGuildMemberRemove(member);
+    });
   }
 
   private addThreadCreateListener(client: Client) {
-    client.on(
-      Events.ThreadCreate,
-      async thread => await this.scrimmageService.trackThreadCreate(thread),
-    );
+    client.on(Events.ThreadCreate, async thread => {
+      if (!this.isAllowedGuild(thread.guild.id)) {
+        return;
+      }
+      if (!this.isAllowedChannel(thread.guild.systemChannelId)) {
+        return;
+      }
+      await this.discordToScrimmageService.trackThreadCreate(thread);
+    });
   }
 
   private addVoiceStateUpdateListener(client: Client) {
-    client.on(
-      Events.VoiceStateUpdate,
-      async (oldState, newState) =>
-        await this.scrimmageService.trackVoiceStateUpdate(oldState, newState),
-    );
-  }
-
-  private addGuildScheduledEventCreateListener(client: Client) {
-    client.on(
-      Events.GuildScheduledEventCreate,
-      async event =>
-        await this.scrimmageService.trackGuildScheduledEventCreate(event),
-    );
+    client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
+      if (!this.isAllowedGuild(newState.guild.id)) {
+        return;
+      }
+      if (!this.isAllowedChannel(newState.guild.systemChannelId)) {
+        return;
+      }
+      await this.discordToScrimmageService.trackVoiceStateUpdate(
+        oldState,
+        newState,
+      );
+    });
   }
 
   private addGuildScheduledEventUserAddListener(client: Client) {
-    client.on(
-      Events.GuildScheduledEventUserAdd,
-      async (event, user) =>
-        await this.scrimmageService.trackGuildScheduledEventUserAdd(
-          event,
-          user,
-        ),
-    );
+    client.on(Events.GuildScheduledEventUserAdd, async (event, user) => {
+      if (!this.isAllowedGuild(event.guild.id)) {
+        return;
+      }
+      if (!this.isAllowedChannel(event.guild.systemChannelId)) {
+        return;
+      }
+      await this.discordToScrimmageService.trackGuildScheduledEventUserAdd(
+        event,
+        user,
+      );
+    });
   }
 
   private addGuildScheduledEventUserRemoveListener(client: Client) {
-    client.on(
-      Events.GuildScheduledEventUserRemove,
-      async (event, user) =>
-        await this.scrimmageService.trackGuildScheduledEventUserRemove(
-          event,
-          user,
-        ),
+    client.on(Events.GuildScheduledEventUserRemove, async (event, user) => {
+      if (!this.isAllowedGuild(event.guild.id)) {
+        return;
+      }
+      if (!this.isAllowedChannel(event.guild.systemChannelId)) {
+        return;
+      }
+      await this.discordToScrimmageService.trackGuildScheduledEventUserRemove(
+        event,
+        user,
+      );
+    });
+  }
+
+  private isAllowedGuild(guildId: string): boolean {
+    return (
+      this.allowedGuildIds.length === 0 ||
+      this.allowedGuildIds.includes(guildId)
+    );
+  }
+
+  private isAllowedChannel(channelId: string): boolean {
+    return (
+      this.allowedChannelIds.length === 0 ||
+      this.allowedChannelIds.includes(channelId)
     );
   }
 }

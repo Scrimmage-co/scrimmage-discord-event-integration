@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { User } from 'discord.js';
+import { PartialUser, User } from 'discord.js';
 
 interface EventDate {
   year: number;
@@ -12,11 +12,11 @@ interface EventDate {
 
 @Injectable()
 export class DiscordUtilsService {
-  async getUserId(User: User) {
-    return User.id;
+  async getUserId(user: User | PartialUser): Promise<string> {
+    return user.id;
   }
 
-  async createEventDateFromTimestamp(timestamp: number): Promise<EventDate> {
+  createEventDateFromTimestamp(timestamp: number): EventDate {
     const date = new Date(timestamp);
     return {
       year: date.getFullYear(),
