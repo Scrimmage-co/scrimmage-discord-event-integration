@@ -25,6 +25,8 @@ spec:
               value: ""
             - name: DISCORD_ALLOWED_GUILD_IDS
               value: ""
+            - name: DISCORD_ALLOW_REGISTRATION
+              value: "true"
             - name: SCRIMMAGE_API_SERVER_ENDPOINT
               value: ""
             - name: SCRIMMAGE_PRIVATE_KEY
