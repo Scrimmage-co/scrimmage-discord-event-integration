@@ -1,5 +1,18 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { Client, Events, GatewayIntentBits } from 'discord.js';
+import {
+  Client,
+  Events,
+  GatewayIntentBits,
+  GuildMember,
+  Message,
+  MessageReaction,
+  PartialGuildMember,
+  PartialMessage,
+  PartialMessageReaction,
+  Partials,
+  PartialUser,
+  User,
+} from 'discord.js';
 import { ConfigService } from '@nestjs/config';
 import { DiscordToScrimmageService } from './discord-to-scrimmage.service';
 import DiscordCommands from './commands';
@@ -101,63 +114,39 @@ export class DiscordService implements OnModuleInit {
         GatewayIntentBits.GuildIntegrations,
         GatewayIntentBits.GuildWebhooks,
       ],
+      partials: [Partials.Reaction, Partials.Message, Partials.Channel],
     });
   }
 
   private addMessageReactionAddListener(client: Client) {
     client.on(Events.MessageReactionAdd, async (reaction, user) => {
-      if (!this.isAllowedGuild(reaction.message.guild.id)) {
-        return;
-      }
-      if (!this.isAllowedChannel(reaction.message.channel.id)) {
-        return;
-      }
-      await this.discordToScrimmageService.trackMessageReactionAdd(
-        reaction,
-        user,
-      );
-    });
-    client.on(Events.Raw, async payload => {
-      if (payload.t !== 'MESSAGE_REACTION_ADD') {
-        return;
-      }
-      if (!this.isAllowedGuild(payload.d.guild_id)) {
-        return;
-      }
-      if (!this.isAllowedChannel(payload.d.channel_id)) {
-        return;
-      }
-      const channel: any = await client.channels.cache
-        .get(payload.d.channel_id)
-        .fetch();
-      if (!channel.messages) {
-        return;
-      }
-      if (channel.messages.cache.has(payload.d.message_id)) {
-        // Allow only messages that was created before bot was started
-        return;
-      }
-      const message = await channel.messages.fetch(payload.d.message_id);
-      const user = await client.users.fetch(payload.d.user_id);
-      const messageReaction = message.reactions.cache.get(
-        payload.d.emoji.name || payload.d.emoji.id,
-      );
-      await this.discordToScrimmageService.trackMessageReactionAdd(
-        messageReaction,
-        user,
+      const fullReaction = await this.loadPartialEntitySafe(reaction);
+      const fullUser = await this.loadPartialEntitySafe(user);
+      await this.ifValidExecute(
+        reaction.message.guild.id,
+        reaction.message.channel.id,
+        [fullReaction, fullUser],
+        async () => {
+          await this.discordToScrimmageService.trackMessageReactionAdd(
+            fullReaction,
+            fullUser,
+          );
+        },
       );
     });
   }
 
   private addMessageCreateListener(client: Client) {
     client.on(Events.MessageCreate, async message => {
-      if (!this.isAllowedGuild(message.guild.id)) {
-        return;
-      }
-      if (!this.isAllowedChannel(message.channel.id)) {
-        return;
-      }
-      await this.discordToScrimmageService.trackMessageCreate(message);
+      const fullMessage = await this.loadPartialEntitySafe(message);
+      await this.ifValidExecute(
+        message.guild.id,
+        message.channel.id,
+        [fullMessage],
+        async () => {
+          await this.discordToScrimmageService.trackMessageCreate(fullMessage);
+        },
+      );
     });
   }
 
@@ -185,96 +174,109 @@ export class DiscordService implements OnModuleInit {
 
   private addGuildMemberAddListener(client: Client) {
     client.on(Events.GuildMemberAdd, async member => {
-      if (!this.isAllowedGuild(member.guild.id)) {
-        return;
-      }
-      if (!this.isAllowedChannel(member.guild.systemChannelId)) {
-        return;
-      }
-      await this.discordToScrimmageService.trackGuildMemberAdd(member);
+      const fullMember = await this.loadPartialEntitySafe(member);
+      await this.ifValidExecute(
+        member.guild.id,
+        member.guild.systemChannelId,
+        [fullMember],
+        async () => {
+          await this.discordToScrimmageService.trackGuildMemberAdd(fullMember);
+        },
+      );
     });
   }
 
   private addGuildMemberUpdateListener(client: Client) {
     client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
-      if (!this.isAllowedGuild(newMember.guild.id)) {
-        return;
-      }
-      if (!this.isAllowedChannel(newMember.guild.systemChannelId)) {
-        return;
-      }
-      await this.discordToScrimmageService.trackGuildMemberUpdate(
-        oldMember,
-        newMember,
+      const fullOldMember = await this.loadPartialEntitySafe(oldMember);
+      const fullNewMember = await this.loadPartialEntitySafe(newMember);
+      await this.ifValidExecute(
+        newMember.guild.id,
+        newMember.guild.systemChannelId,
+        [fullOldMember, fullNewMember],
+        async () => {
+          await this.discordToScrimmageService.trackGuildMemberUpdate(
+            fullOldMember,
+            fullNewMember,
+          );
+        },
       );
     });
   }
 
   private addGuildMemberRemoveListener(client: Client) {
     client.on(Events.GuildMemberRemove, async member => {
-      if (!this.isAllowedGuild(member.guild.id)) {
-        return;
-      }
-      if (!this.isAllowedChannel(member.guild.systemChannelId)) {
-        return;
-      }
-      await this.discordToScrimmageService.trackGuildMemberRemove(member);
+      const fullMember = await this.loadPartialEntitySafe(member);
+      await this.ifValidExecute(
+        member.guild.id,
+        member.guild.systemChannelId,
+        [fullMember],
+        async () => {
+          await this.discordToScrimmageService.trackGuildMemberRemove(
+            fullMember,
+          );
+        },
+      );
     });
   }
 
   private addThreadCreateListener(client: Client) {
     client.on(Events.ThreadCreate, async thread => {
-      if (!this.isAllowedGuild(thread.guild.id)) {
-        return;
-      }
-      if (!this.isAllowedChannel(thread.guild.systemChannelId)) {
-        return;
-      }
-      await this.discordToScrimmageService.trackThreadCreate(thread);
+      await this.ifValidExecute(
+        thread.guild.id,
+        thread.guild.systemChannelId,
+        [thread],
+        async () => {
+          await this.discordToScrimmageService.trackThreadCreate(thread);
+        },
+      );
     });
   }
 
   private addVoiceStateUpdateListener(client: Client) {
     client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
-      if (!this.isAllowedGuild(newState.guild.id)) {
-        return;
-      }
-      if (!this.isAllowedChannel(newState.guild.systemChannelId)) {
-        return;
-      }
-      await this.discordToScrimmageService.trackVoiceStateUpdate(
-        oldState,
-        newState,
+      await this.ifValidExecute(
+        newState.guild.id,
+        newState.guild.systemChannelId,
+        [oldState, newState],
+        async () => {
+          await this.discordToScrimmageService.trackVoiceStateUpdate(
+            oldState,
+            newState,
+          );
+        },
       );
     });
   }
 
   private addGuildScheduledEventUserAddListener(client: Client) {
     client.on(Events.GuildScheduledEventUserAdd, async (event, user) => {
-      if (!this.isAllowedGuild(event.guild.id)) {
-        return;
-      }
-      if (!this.isAllowedChannel(event.guild.systemChannelId)) {
-        return;
-      }
-      await this.discordToScrimmageService.trackGuildScheduledEventUserAdd(
-        event,
-        user,
+      await this.ifValidExecute(
+        event.guild.id,
+        event.guild.systemChannelId,
+        [event, user],
+        async () => {
+          await this.discordToScrimmageService.trackGuildScheduledEventUserAdd(
+            event,
+            user,
+          );
+        },
       );
     });
   }
 
   private addGuildScheduledEventUserRemoveListener(client: Client) {
     client.on(Events.GuildScheduledEventUserRemove, async (event, user) => {
-      if (!this.isAllowedGuild(event.guild.id)) {
-        return;
-      }
-      if (!this.isAllowedChannel(event.guild.systemChannelId)) {
-        return;
-      }
-      await this.discordToScrimmageService.trackGuildScheduledEventUserRemove(
-        event,
-        user,
+      await this.ifValidExecute(
+        event.guild.id,
+        event.guild.systemChannelId,
+        [event, user],
+        async () => {
+          await this.discordToScrimmageService.trackGuildScheduledEventUserRemove(
+            event,
+            user,
+          );
+        },
       );
     });
   }
@@ -291,5 +293,45 @@ export class DiscordService implements OnModuleInit {
       this.allowedChannelIds.length === 0 ||
       this.allowedChannelIds.includes(channelId)
     );
+  }
+
+  private ifValidExecute(
+    guildId: string,
+    channelId: string,
+    requiredNonNullObjects: any[],
+    callback: () => Promise<void>,
+  ): Promise<void> {
+    if (
+      this.isAllowedGuild(guildId) &&
+      this.isAllowedChannel(channelId) &&
+      requiredNonNullObjects.every(Boolean)
+    ) {
+      return callback();
+    }
+  }
+
+  private async loadPartialEntitySafe<
+    Entity extends
+      | MessageReaction
+      | PartialMessageReaction
+      | Message
+      | PartialMessage
+      | User
+      | PartialUser
+      | GuildMember
+      | PartialGuildMember,
+    Result extends ReturnType<Entity['fetch']>,
+  >(entity: Entity): Promise<Result> {
+    if (entity.partial) {
+      try {
+        const fullEntity = await entity.fetch();
+        return fullEntity as Result;
+      } catch (error) {
+        this.logger.error(error);
+        return null;
+      }
+    } else {
+      return entity as any as Result;
+    }
   }
 }
