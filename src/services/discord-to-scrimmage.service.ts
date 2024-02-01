@@ -39,7 +39,7 @@ export class DiscordToScrimmageService implements OnModuleInit {
     // User reacted to a message
     this.scrimmageService.trackEvent({
       userId: await this.discordUtilsService.getUserId(user),
-      uniqueId: reaction.message.id,
+      uniqueId: `${reaction.message.id}::${reaction.emoji.id}`,
       dataType: `${this.dataTypePrefix}DiscordMessageReactionAdd`,
       body: {
         channelName: (reaction.message.channel as any).name,
@@ -58,7 +58,7 @@ export class DiscordToScrimmageService implements OnModuleInit {
     // Message of the user received a reaction
     this.scrimmageService.trackEvent({
       userId: await this.discordUtilsService.getUserId(reaction.message.author),
-      uniqueId: reaction.message.id,
+      uniqueId: `${reaction.message.id}::${reaction.emoji.id}`,
       dataType: `${this.dataTypePrefix}DiscordMessageReactionReceived`,
       body: {
         channelName: (reaction.message.channel as any).name,

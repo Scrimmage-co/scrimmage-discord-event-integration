@@ -117,6 +117,36 @@ export class DiscordService implements OnModuleInit {
         user,
       );
     });
+    client.on(Events.Raw, async payload => {
+      if (payload.t !== 'MESSAGE_REACTION_ADD') {
+        return;
+      }
+      if (!this.isAllowedGuild(payload.d.guild_id)) {
+        return;
+      }
+      if (!this.isAllowedChannel(payload.d.channel_id)) {
+        return;
+      }
+      const channel: any = await client.channels.cache
+        .get(payload.d.channel_id)
+        .fetch();
+      if (!channel.messages) {
+        return;
+      }
+      if (channel.messages.cache.has(payload.d.message_id)) {
+        // Allow only messages that was created before bot was started
+        return;
+      }
+      const message = await channel.messages.fetch(payload.d.message_id);
+      const user = await client.users.fetch(payload.d.user_id);
+      const messageReaction = message.reactions.cache.get(
+        payload.d.emoji.name || payload.d.emoji.id,
+      );
+      await this.discordToScrimmageService.trackMessageReactionAdd(
+        messageReaction,
+        user,
+      );
+    });
   }
 
   private addMessageCreateListener(client: Client) {
