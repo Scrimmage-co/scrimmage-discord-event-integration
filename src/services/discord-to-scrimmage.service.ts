@@ -55,6 +55,25 @@ export class DiscordToScrimmageService implements OnModuleInit {
         original: reaction.toJSON(),
       },
     });
+    // Message of the user received a reaction
+    this.scrimmageService.trackEvent({
+      userId: await this.discordUtilsService.getUserId(reaction.message.author),
+      uniqueId: reaction.message.id,
+      dataType: `${this.dataTypePrefix}DiscordMessageReactionReceived`,
+      body: {
+        channelName: (reaction.message.channel as any).name,
+        channelId: reaction.message.channel.id,
+        guildName: reaction.message.guild.name,
+        guildId: reaction.message.guild.id,
+        messageId: reaction.message.id,
+        messageContent: reaction.message.content,
+        reaction: reaction.emoji.name,
+        reactionId: reaction.emoji.id,
+        reactionCount: reaction.count,
+        totalReactionsCount: reaction.message.reactions.cache.size,
+        original: reaction.toJSON(),
+      },
+    });
   }
 
   async registerUser(user: User) {
