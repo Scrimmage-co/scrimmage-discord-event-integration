@@ -11,8 +11,8 @@ async function bootstrap() {
     'SCRIMMAGE_API_SERVER_ENDPOINT',
     'SCRIMMAGE_PRIVATE_KEY',
     'SCRIMMAGE_NAMESPACE',
-    'WEBHOOK_DOMAIN',
-    'WEBHOOK_PORT',
+    'DOMAIN',
+    'PORT',
   ];
   for (const env of requiredEnvs) {
     if (!configService.get(env as any)) {
